@@ -52,3 +52,62 @@ imputer = SimpleImputer(strategy='most_frequent', missing_values=np.nan)
 imputer.fit(df[obj_columns])
 df[obj_columns] = imputer.transform(df[obj_columns])
 ```
+Columns that were irrelevant or would cause data leakage were deleted from the dataframe.
+```bash
+df.drop(['Status', 'N_Days', 'ID'], axis=1, inplace=True)
+```
+
+### Pre-processing
+The categorical variables were turned into a numerical format for machine learning pre-processing by using the pandas get_dummies function.
+The drop first parameter was set to true to avoid unnecessary columns.
+```bash
+df_dummy = pd.get_dummies(df, drop_first=True)
+```
+The stage variable was converted to either 0 or 1 to present the presence or non-presence of cirrhosis.
+```bash
+df_dummy['Stage'] = np.where(df_dummy['Stage'] == 4.0, 1, 0)
+```
+The data was then ready for modeling and was split into separate features and target variables and split into train and test datasets with 20% test size.
+```bash
+X = df_dummy.drop('Stage', axis=1)
+y= df_dummy['Stage']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=SEED)
+```
+
+### Modeling
+Initially, KNeighborsClassifier, GradientBoostingClassifier, and RandomForrestClassifier were tested. RandomForrestClassifier performed the best with the highest AUC score.
+```bash
+knn = KNeighborsClassifier()
+gbc = GradientBoostingClassifier()
+rf = RandomForestClassifier()
+models = [('KNeighborsClassifier', knn), ('GradientBoostingClassifier', gbc), ('RandomForestClassifier', rf)]
+
+for name, model in models:
+  model.fit(X_train, y_train)
+  y_pred = model.predict_proba(X_test)[:,1]
+  auc_score = roc_auc_score(y_test, y_pred)
+  print(name + ' - AUC score is: ' + str(auc_score))
+```
+Then hyperparameter tuning was performed. First, a parameter grid was created with 4 parameters
+```bash
+param_grid = {
+  'max_depth' : list(range(1,11)),
+  'n_estimators' : [50,100,150,200],
+  'min_samples_leaf' : list(range(1,6)),
+  'min_samples_split' : list(range(2,6))
+}
+```
+GridSearchCV was used for cross-validation with our parameters in the parameter grid.
+```bash
+gridCV = GridSearchCV(estimator=rf, param_grid=param_grid, cv=10, scoring='roc_auc')
+gridCV.fit(X_train, y_train)
+y_pred = gridCV.predict_proba(X_test)
+```
+RandomForrestClassifier was the classification model to use and with hypertuned parameters provided and AUC score of 79%.
+
+Best Parameters:
+- max_depth=3,
+- min_samples_split=3
+
+## Limitations
+I think the model is limited due to a limited dataset. Only 424 samples were available with some of the feature columns having 100+ missing values.
